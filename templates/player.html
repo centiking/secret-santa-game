@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player - Secret Santa</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🎁 Join Secret Santa Game</h1>
+        
+        <div id="join-screen">
+            <input type="text" id="room-code-input" placeholder="Enter Room Code" maxlength="6">
+            <input type="text" id="player-name-input" placeholder="Your Name">
+            <button onclick="joinGame()" class="btn btn-primary">Join Game</button>
+        </div>
+        
+        <div id="assignment-screen" style="display: none;">
+            <h2>Who are you gifting to?</h2>
+            <p>Select the person you're Secret Santa for:</p>
+            <select id="target-select" class="select-box">
+                <option value="">-- Select Person --</option>
+            </select>
+            <button onclick="submitAssignment()" class="btn btn-success">Submit</button>
+            <p id="waiting-message" style="display: none;">Waiting for others to submit...</p>
+        </div>
+        
+        <div id="game-screen" style="display: none;">
+            <h2>Who is YOUR Secret Santa?</h2>
+            <p>Attempts: <span id="attempt-count">0</span></p>
+            
+            <select id="guess-select" class="select-box">
+                <option value="">-- Make a Guess --</option>
+            </select>
+            <button onclick="makeGuess()" class="btn btn-primary" id="guess-btn">Submit Guess</button>
+            
+            <div id="result-message"></div>
+            
+            <div id="success-screen" style="display: none;">
+                <h3>🎉 You found your Santa!</h3>
+                <p>It was <strong id="santa-name"></strong>!</p>
+                <p>You finished in <strong id="final-rank"></strong> place with <strong id="final-attempts"></strong> guess(es)!</p>
+            </div>
+            
+            <div id="leaderboard">
+                <h3>🏆 Leaderboard</h3>
+                <div id="player-leaderboard"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const socket = io();
+        let roomCode = null;
+        let playerName = null;
+        let playerList = [];
+        let hasFound = false;
+        let attemptCount = 0;
+        
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        
+        socket.on('joined_game', (data) => {
+            roomCode = data.room_code;
+            playerName = data.player_name;
+            document.getElementById('join-screen').style.display = 'none';
+            document.getElementById('assignment-screen').style.display = 'block';
+        });
+        
+        socket.on('player_list_update', (data) => {
+            playerList = data.players.filter(p => p !== playerName);
+            updateSelects();
+        });
+        
+        socket.on('assignment_submitted', (data) => {
+            document.getElementById('waiting-message').style.display = 'block';
+        });
+        
+        socket.on('game_started', (data) => {
+            document.getElementById('assignment-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+            updateSelects();
+        });
+        
+        socket.on('guess_result', (data) => {
+            attemptCount = data.attempts;
+            document.getElementById('attempt-count').textContent = attemptCount;
+            
+            const resultDiv = document.getElementById('result-message');
+            if (data.correct) {
+                resultDiv.innerHTML = `<p class="success">✓ Correct! Your Santa is ${data.guessed}!</p>`;
+                hasFound = true;
+                document.getElementById('guess-btn').disabled = true;
+                document.getElementById('guess-select').disabled = true;
+            } else {
+                resultDiv.innerHTML = `<p class="error">✗ Wrong! Try again...</p>`;
+                setTimeout(() => resultDiv.innerHTML = '', 2000);
+            }
+        });
+        
+        socket.on('player_completed', (data) => {
+            if (data.player === playerName) {
+                document.getElementById('success-screen').style.display = 'block';
+                document.getElementById('santa-name').textContent = data.santa;
+                document.getElementById('final-rank').textContent = data.rank;
+                document.getElementById('final-attempts').textContent = data.attempts;
+            }
+        });
+        
+        socket.on('leaderboard_update', (data) => {
+            const leaderboardDiv = document.getElementById('player-leaderboard');
+            leaderboardDiv.innerHTML = '';
+            
+            if (data.leaderboard.length === 0) {
+                leaderboardDiv.innerHTML = '<p>No discoveries yet...</p>';
+            } else {
+                data.leaderboard.forEach(entry => {
+                    const div = document.createElement('div');
+                    div.className = 'leaderboard-entry';
+                    div.innerHTML = `
+                        <strong>#${entry.rank} ${entry.player}</strong> - ${entry.guesses} guess${entry.guesses !== 1 ? 'es' : ''}
+                    `;
+                    leaderboardDiv.appendChild(div);
+                });
+            }
+        });
+        
+        socket.on('error', (data) => {
+            alert(data.message);
+        });
+        
+        function updateSelects() {
+            const targetSelect = document.getElementById('target-select');
+            const guessSelect = document.getElementById('guess-select');
+            
+            targetSelect.innerHTML = '<option value="">-- Select Person --</option>';
+            guessSelect.innerHTML = '<option value="">-- Make a Guess --</option>';
+            
+            playerList.forEach(name => {
+                const option1 = document.createElement('option');
+                option1.value = name;
+                option1.textContent = name;
+                targetSelect.appendChild(option1);
+                
+                const option2 = document.createElement('option');
+                option2.value = name;
+                option2.textContent = name;
+                guessSelect.appendChild(option2);
+            });
+        }
+        
+        function joinGame() {
+            const code = document.getElementById('room-code-input').value.trim().toUpperCase();
+            const name = document.getElementById('player-name-input').value.trim();
+            
+            if (!code || !name) {
+                alert('Please enter both room code and your name');
+                return;
+            }
+            
+            socket.emit('join_game', {
+                room_code: code,
+                player_name: name
+            });
+        }
+        
+        function submitAssignment() {
+            const target = document.getElementById('target-select').value;
+            
+            if (!target) {
+                alert('Please select who you\'re gifting to');
+                return;
+            }
+            
+            socket.emit('submit_assignment', {
+                room_code: roomCode,
+                player_name: playerName,
+                got_name: target
+            });
+        }
+        
+        function makeGuess() {
+            if (hasFound) return;
+            
+            const guess = document.getElementById('guess-select').value;
+            
+            if (!guess) {
+                alert('Please select a name to guess');
+                return;
+            }
+            
+            socket.emit('make_guess', {
+                room_code: roomCode,
+                player_name: playerName,
+                guessed_santa: guess
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Host Game - Secret Santa</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🎅 Host Secret Santa Game</h1>
+        
+        <div id="setup-screen">
+            <button onclick="createGame()" class="btn btn-primary">Create New Game</button>
+        </div>
+        
+        <div id="waiting-screen" style="display: none;">
+            <h2>Room Code: <span id="room-code" class="room-code"></span></h2>
+            <p>Share this code with players!</p>
+            
+            <div class="player-list">
+                <h3>Players Joined (<span id="player-count">0</span>):</h3>
+                <ul id="players"></ul>
+            </div>
+            
+            <div id="assignment-status">
+                <p><span id="assignments-count">0</span> / <span id="total-players">0</span> players have entered their assignments</p>
+            </div>
+            
+            <button onclick="startGame()" id="start-btn" class="btn btn-success" disabled>Start Game</button>
+            <p id="status-message"></p>
+        </div>
+        
+        <div id="game-screen" style="display: none;">
+            <h2>Game in Progress!</h2>
+            <div id="leaderboard">
+                <h3>🏆 Leaderboard</h3>
+                <div id="leaderboard-list"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const socket = io();
+        let roomCode = null;
+        
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        
+        socket.on('game_created', (data) => {
+            roomCode = data.room_code;
+            document.getElementById('room-code').textContent = roomCode;
+            document.getElementById('setup-screen').style.display = 'none';
+            document.getElementById('waiting-screen').style.display = 'block';
+        });
+        
+        socket.on('player_list_update', (data) => {
+            const playersList = document.getElementById('players');
+            playersList.innerHTML = '';
+            data.players.forEach(name => {
+                const li = document.createElement('li');
+                li.textContent = name;
+                playersList.appendChild(li);
+            });
+            document.getElementById('player-count').textContent = data.count;
+            document.getElementById('total-players').textContent = data.count;
+        });
+        
+        socket.on('assignment_submitted', (data) => {
+            document.getElementById('assignments-count').textContent = data.submitted;
+            if (data.all_ready) {
+                document.getElementById('start-btn').disabled = false;
+                document.getElementById('status-message').textContent = '✓ All players ready!';
+            }
+        });
+        
+        socket.on('game_started', () => {
+            document.getElementById('waiting-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+        });
+        
+        socket.on('leaderboard_update', (data) => {
+            const leaderboardDiv = document.getElementById('leaderboard-list');
+            leaderboardDiv.innerHTML = '';
+            
+            if (data.leaderboard.length === 0) {
+                leaderboardDiv.innerHTML = '<p>No one has found their Santa yet...</p>';
+            } else {
+                data.leaderboard.forEach(entry => {
+                    const div = document.createElement('div');
+                    div.className = 'leaderboard-entry';
+                    div.innerHTML = `
+                        <strong>#${entry.rank} ${entry.player}</strong> - 
+                        ${entry.guesses} guess${entry.guesses !== 1 ? 'es' : ''} - 
+                        Santa: ${entry.santa}
+                    `;
+                    leaderboardDiv.appendChild(div);
+                });
+            }
+            
+            if (data.game_complete) {
+                leaderboardDiv.innerHTML += '<h3>🎉 Game Complete!</h3>';
+            }
+        });
+        
+        socket.on('error', (data) => {
+            alert(data.message);
+        });
+        
+        function createGame() {
+            socket.emit('create_game');
+        }
+        
+        function startGame() {
+            if (roomCode) {
+                socket.emit('start_game', { room_code: roomCode });
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secret Santa Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🎅 Secret Santa Guessing Game</h1>
+        <p class="subtitle">Race to discover who your Secret Santa is!</p>
+        
+        <div class="button-group">
+            <a href="/host" class="btn btn-primary">Host a Game</a>
+            <a href="/player" class="btn btn-secondary">Join a Game</a>
+        </div>
+        
+        <div class="info-box">
+            <h3>How to Play:</h3>
+            <ol>
+                <li>Host creates a game and shares the room code</li>
+                <li>Players join and enter who they're gifting to</li>
+                <li>Once everyone joins, the host starts the game</li>
+                <li>Race to guess who YOUR Secret Santa is!</li>
+                <li>Fewest guesses wins! 🏆</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html>
