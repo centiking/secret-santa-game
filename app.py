@@ -14,9 +14,12 @@ socketio = SocketIO(
     cors_allowed_origins="*", 
     async_mode='threading',
     ping_timeout=60,
-    ping_interval=25
+    ping_interval=25,
+    max_http_buffer_size=1000000,
+    allow_upgrades=True,
+    http_compression=True,
+    compression_threshold=1024
 )
-
 # Store game sessions in memory
 games = {}
 
@@ -116,15 +119,22 @@ def handle_connect():
 
 @socketio.on('create_game')
 def handle_create_game():
-    room_code = generate_code()
-    while room_code in games:
+    try:
+        print(f'[CREATE_GAME] Request from {request.sid}')
+        
         room_code = generate_code()
-    
-    games[room_code] = Game(request.sid)
-    join_room(room_code)
-    
-    print(f'Game created: {room_code}')
-    emit('game_created', {'room_code': room_code})
+        while room_code in games:
+            room_code = generate_code()
+        
+        games[room_code] = Game(request.sid)
+        join_room(room_code)
+        
+        print(f'[CREATE_GAME] Success - Room: {room_code}')
+        emit('game_created', {'room_code': room_code})
+        
+    except Exception as e:
+        print(f'[CREATE_GAME] Error: {str(e)}')
+        emit('error', {'message': 'Failed to create game. Please try again.'})
 
 @socketio.on('join_game')
 def handle_join_game(data):

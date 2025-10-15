@@ -11,8 +11,19 @@
     <div class="container">
         <h1>🎅 Host Secret Santa Game</h1>
         
+        <!-- Connection Status -->
+        <div id="connection-status" class="status-indicator">
+            <span class="status-dot connecting"></span>
+            <span id="status-text">Connecting to server...</span>
+        </div>
+        
         <div id="setup-screen">
-            <button onclick="createGame()" class="btn btn-primary">Create New Game</button>
+            <button onclick="createGame()" class="btn btn-primary" id="create-btn">
+                Create New Game
+            </button>
+            <p id="loading-message" style="display: none; text-align: center; color: #666;">
+                Creating game... <span class="loader"></span>
+            </p>
         </div>
         
         <div id="waiting-screen" style="display: none;">
@@ -42,18 +53,50 @@
     </div>
     
     <script>
-        const socket = io();
-        let roomCode = null;
-        
-        socket.on('connect', () => {
-            console.log('Connected to server');
+        // Connection configuration with better timeouts
+        const socket = io({
+            timeout: 10000,
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: 5
         });
         
+        let roomCode = null;
+        let isCreatingGame = false;
+        let connectionTimeout;
+        
+        // Connection status tracking
+        socket.on('connect', () => {
+            console.log('✓ Connected to server');
+            updateConnectionStatus('connected', 'Connected');
+            clearTimeout(connectionTimeout);
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('✗ Disconnected from server');
+            updateConnectionStatus('disconnected', 'Disconnected');
+        });
+        
+        socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+            updateConnectionStatus('error', 'Connection error');
+            hideLoading();
+        });
+        
+        socket.on('reconnecting', (attemptNumber) => {
+            console.log(`Reconnecting... attempt ${attemptNumber}`);
+            updateConnectionStatus('connecting', `Reconnecting (${attemptNumber})...`);
+        });
+        
+        // Game events
         socket.on('game_created', (data) => {
+            console.log('✓ Game created:', data.room_code);
             roomCode = data.room_code;
             document.getElementById('room-code').textContent = roomCode;
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('waiting-screen').style.display = 'block';
+            hideLoading();
         });
         
         socket.on('player_list_update', (data) => {
@@ -106,10 +149,57 @@
         });
         
         socket.on('error', (data) => {
-            alert(data.message);
+            console.error('Server error:', data.message);
+            alert('Error: ' + data.message);
+            hideLoading();
         });
         
+        // Helper functions
+        function updateConnectionStatus(status, text) {
+            const statusDot = document.querySelector('.status-dot');
+            const statusText = document.getElementById('status-text');
+            
+            statusDot.className = 'status-dot ' + status;
+            statusText.textContent = text;
+            
+            // Enable/disable create button based on connection
+            document.getElementById('create-btn').disabled = (status !== 'connected');
+        }
+        
+        function showLoading() {
+            document.getElementById('loading-message').style.display = 'block';
+            document.getElementById('create-btn').disabled = true;
+        }
+        
+        function hideLoading() {
+            document.getElementById('loading-message').style.display = 'none';
+            document.getElementById('create-btn').disabled = false;
+            isCreatingGame = false;
+        }
+        
         function createGame() {
+            if (isCreatingGame) {
+                console.log('Game creation already in progress');
+                return;
+            }
+            
+            if (!socket.connected) {
+                alert('Not connected to server. Please wait...');
+                return;
+            }
+            
+            console.log('Creating game...');
+            isCreatingGame = true;
+            showLoading();
+            
+            // Set timeout for game creation
+            connectionTimeout = setTimeout(() => {
+                if (isCreatingGame) {
+                    alert('Game creation timed out. Please try again.');
+                    hideLoading();
+                }
+            }, 10000);
+            
             socket.emit('create_game');
         }
         
